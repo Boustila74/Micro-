@@ -1,3 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>المساعد الصوتي</title>
+<style>
+:root{--bg:#ffffff;--fg:#000000;--muted:#5b6670;--blue:#1d4ed8;--green:#15803d;--card:#f3f6fa;--line:#d5dce4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000000;--fg:#ffffff;--muted:#9aa5b1;--blue:#6b9bff;--green:#4ade80;--card:#12161b;--line:#26303a}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif;line-height:1.7;padding:20px 16px 40px;max-width:560px;margin-inline:auto}
+h1{font-size:1.5rem;margin:8px 0 4px}
+.sub{color:var(--muted);margin:0 0 24px;font-size:.95rem}
+.mic-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;margin:12px 0 20px}
+#mic{width:112px;height:112px;border-radius:50%;border:0;background:var(--blue);color:#fff;font-size:2.6rem;cursor:pointer;transition:background .2s,transform .15s}
+#mic:focus-visible{outline:3px solid var(--green);outline-offset:4px}
+#mic.on{background:var(--green);transform:scale(1.06)}
+#state{color:var(--muted);min-height:1.6em;text-align:center}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.box h2{font-size:1rem;margin:0 0 8px}
+#heard{font-size:1.1rem;min-height:1.7em}
+#result{color:var(--green);font-weight:600;min-height:1.7em}
+.row{display:flex;gap:8px}
+input[type=text]{flex:1;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button.s{font:inherit;padding:10px 16px;border:0;border-radius:8px;background:var(--blue);color:#fff;cursor:pointer}
+ul{margin:0;padding-inline-start:20px}
+li{margin-bottom:4px}
+.note-i{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:6px 0}
+.note-i button{background:none;border:0;color:var(--muted);cursor:pointer;font:inherit}
+.warn{color:#b45309;font-size:.9rem}
+</style>
+</head>
+<body>
+<h1>المساعد الصوتي</h1>
+<p class="sub">اضغط الميكروفون وقل أمرك بالعربية الفصحى.</p>
+
+<div class="mic-wrap">
+  <button id="mic" aria-label="ابدأ الاستماع">🎙</button>
+  <div id="state">اضغط للبدء</div>
+  <label><input type="checkbox" id="cont" checked> استماع مستمر (يعيد التشغيل تلقائيًا)</label>
+  <label><input type="checkbox" id="wake" checked> كلمة التنبيه «يا مساعد» قبل الأمر</label>
+</div>
+
+<div class="box"><h2>ما سمعته</h2><div id="heard">—</div></div>
+<div class="box"><h2>النتيجة</h2><div id="result">—</div></div>
+
+<div class="box">
+  <h2>أو اكتب الأمر</h2>
+  <div class="row"><input type="text" id="txt" placeholder="مثال: افتح واتساب"><button class="s" id="go">نفّذ</button></div>
+</div>
+
+<div class="box">
+  <h2>الأوامر المتاحة</h2>
+  <ul>
+    <li>«افتح واتساب» أو يوتيوب أو فيسبوك أو تيك توك أو الخرائط أو البريد</li>
+    <li>«ابحث عن …» لبحث جوجل</li>
+    <li>«دوّن …» لحفظ ملاحظة</li>
+    <li>«اعرض الملاحظات» أو «امسح الملاحظات»</li>
+    <li>«كم الساعة» أو «ما التاريخ»</li>
+    <li>«مؤقت خمس دقائق» (يعمل والصفحة مفتوحة)</li>
+    <li>«اتصل بـ 0555…» يفتح لوحة الاتصال</li>
+  </ul>
+</div>
+
+<div class="box"><h2>الملاحظات</h2><div id="notes">لا توجد ملاحظات بعد. قل «دوّن» ثم نص الملاحظة.</div></div>
+<p class="warn" id="warn" hidden>متصفحك لا يدعم التعرف على الكلام. افتح الصفحة في Chrome على أندرويد، أو استخدم الكتابة.</p>
+<script>
+var heard=document.getElementById('heard'),result=document.getElementById('result'),stateEl=document.getElementById('state'),mic=document.getElementById('mic'),notesEl=document.getElementById('notes');
+var notes=[];
+try{notes=JSON.parse(localStorage.getItem('vc_notes')||'[]')}catch(e){notes=[]}
+function saveNotes(){try{localStorage.setItem('vc_notes',JSON.stringify(notes))}catch(e){}}
+function renderNotes(){
+  notesEl.innerHTML='';
+  if(!notes.length){notesEl.textContent='لا توجد ملاحظات بعد. قل «دوّن» ثم نص الملاحظة.';return}
+  notes.forEach(function(n,i){
+    var d=document.createElement('div');d.className='note-i';
+    var s=document.createElement('span');s.textContent=n;
+    var b=document.createElement('button');b.textContent='حذف';b.onclick=function(){notes.splice(i,1);saveNotes();renderNotes()};
+    d.appendChild(s);d.appendChild(b);notesEl.appendChild(d);
+  });
+}
+renderNotes();
+
+var apps={
+ 'واتساب':'https://wa.me/','واتس اب':'https://wa.me/','واتس':'https://wa.me/','يوتوب':'https://www.youtube.com/','فايسبوك':'https://www.facebook.com/','فيس بوك':'https://www.facebook.com/','تيكتوك':'https://www.tiktok.com/','انستغرام':'https://www.instagram.com/','إنستغرام':'https://www.instagram.com/','جوجل':'https://www.google.com/','غوغل':'https://www.google.com/','كانفا':'https://www.canva.com/','جيت هاب':'https://github.com/','خرائط':'https://maps.google.com/','جميل':'https://mail.google.com/','الترجمة':'https://translate.google.com/','يوتيوب':'https://www.youtube.com/','فيسبوك':'https://www.facebook.com/',
+ 'تيك توك':'https://www.tiktok.com/','الخرائط':'https://maps.google.com/','البريد':'https://mail.google.com/','جيميل':'https://mail.google.com/'
+};
+var nums={'واحد':1,'واحدة':1,'اثنين':2,'دقيقتين':2,'ثلاث':3,'ثلاثة':3,'اربع':4,'أربع':4,'أربعة':4,'خمس':5,'خمسة':5,'ست':6,'ستة':6,'سبع':7,'سبعة':7,'ثمان':8,'ثمانية':8,'تسع':9,'تسعة':9,'عشر':10,'عشرة':10,'عشرين':20,'ثلاثين':30};
+function toLatin(s){return s.replace(/[٠-٩]/g,function(d){return '٠١٢٣٤٥٦٧٨٩'.indexOf(d)})}
+function say(t){result.textContent=t;try{var u=new SpeechSynthesisUtterance(t);u.lang='ar-SA';speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}}
+function openUrl(u){window.open(u,'_blank')||(location.href=u)}
+
+function run(raw){
+  var t=toLatin(raw).trim();heard.textContent=t||'—';
+  if(!t)return;
+  var m;
+  if((m=t.match(/^(?:ابحث عن|بحث عن|ابحث)\s+(.+)/))){say('أبحث عن: '+m[1]);openUrl('https://www.google.com/search?q='+encodeURIComponent(m[1]));return}
+  if((m=t.match(/^(?:دون|دوّن|سجل|سجّل|اكتب)\s+(.+)/))){notes.unshift(m[1]);saveNotes();renderNotes();say('تم حفظ الملاحظة');return}
+  if(/اعرض الملاحظات|الملاحظات/.test(t)&&!/امسح|احذف/.test(t)){say(notes.length?'لديك '+notes.length+' ملاحظة':'لا توجد ملاحظات');return}
+  if(/امسح الملاحظات|احذف الملاحظات/.test(t)){notes=[];saveNotes();renderNotes();say('تم مسح الملاحظات');return}
+  if(/كم الساع[ةه]|الساع[ةه] كم|الوقت/.test(t)){say('الساعة الآن '+new Date().toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'}));return}
+  if(/التاريخ|اليوم/.test(t)){say(new Date().toLocaleDateString('ar',{weekday:'long',year:'numeric',month:'long',day:'numeric'}));return}
+  if((m=t.match(/مؤقت\s+(.+?)\s*(دقيقة|دقائق|دقيقتين|ثانية|ثواني)?$/))||/دقيقتين/.test(t)){
+    var w=m?m[1]:'دقيقتين',unit=(m&&m[2])||'دقائق',n=parseInt(w,10);
+    if(isNaN(n))n=nums[w.trim()]||(/دقيقتين/.test(t)?2:NaN);
+    if(isNaN(n)){say('لم أفهم مدة المؤقت');return}
+    var ms=/ثانية|ثواني/.test(unit)?n*1000:n*60000;
+    say('بدأ المؤقت لمدة '+n+(/ثانية|ثواني/.test(unit)?' ثانية':' دقيقة'));
+    setTimeout(function(){say('انتهى المؤقت');try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}},ms);return}
+  if((m=t.match(/(?:اتصل|اتصال|كلم)\s*(?:بالرقم|برقم|بـ|ب|على|الى|إلى)?\s*([\d\s+]{6,})/))){var p=m[1].replace(/\s/g,'');say('أفتح الاتصال بالرقم '+p);location.href='tel:'+p;return}
+  for(var k in apps){if(t.indexOf(k)>-1){say('أفتح '+k);openUrl(apps[k]);return}}
+  if((m=t.match(/^(?:ارسل|أرسل)\s+(?:رسالة\s+)?(?:واتساب\s+)?(?:الى|إلى|ل|لـ)?\s*([\d\s+]{8,})\s+(.+)/))){var q=m[1].replace(/\s/g,'');say('أجهّز الرسالة');openUrl('https://wa.me/'+q+'?text='+encodeURIComponent(m[2]));return}
+  if((m=t.match(/^(?:ترجم|ترجمة)\s+(.+)/))){say('أفتح الترجمة');openUrl('https://translate.google.com/?sl=auto&tl=en&text='+encodeURIComponent(m[1]));return}
+  if((m=t.match(/^(?:شغل|شغّل|استمع الى|استمع إلى)\s+(.+)/))){say('أبحث في يوتيوب عن: '+m[1]);openUrl('https://www.youtube.com/results?search_query='+encodeURIComponent(m[1]));return}
+  if((m=t.match(/^(?:اين|أين|خذني الى|خذني إلى|موقع)\s+(.+)/))){say('أبحث في الخرائط عن: '+m[1]);openUrl('https://www.google.com/maps/search/'+encodeURIComponent(m[1]));return}
+  say('أمر غير معروف، سأبحث عنه في جوجل');openUrl('https://www.google.com/search?q='+encodeURIComponent(t));
+}
+
 document.getElementById('go').onclick=function(){var i=document.getElementById('txt');run(i.value);i.value=''};
 document.getElementById('txt').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('go').click()});
 
